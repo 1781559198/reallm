@@ -141,17 +141,18 @@ def run_system_simulation(config, workspace_dir, model,
         print(f"Prefill chunk: {prefill_chunk}")
         for trace_file in traces:
             print(f"Simulating trace: {trace_file}...")
-            run_system_sim(model=model, 
-                           trace=trace_file,
-                           hw_node_name=hw_node_name,
-                           num_nodes=num_nodes,
-                           parallelism=attn_parallelism, 
-                           io_algo=io_algo,
-                           scheduler_algo=scheduler_algo, 
-                           prefill_chunk=prefill_chunk,
-                           sim_method=sim_method,
-                           end_reqs=end_reqs,
-                           workspace_dir=workspace_dir,
+            run_system_sim(
+                            model=model,                 # llama/deepseek 模型对象（决定算子规模/层数/结构等）
+                            trace=trace_file,            # 请求到达流（arrival/prompt/token）
+                            hw_node_name=hw_node_name,   # 选择硬件/延迟表
+                            num_nodes=num_nodes,         # GPU 数量
+                            parallelism=attn_parallelism,# 并行度（目前 attn=ffn）
+                            io_algo=io_algo,             # IO/执行组织策略
+                            scheduler_algo=scheduler_algo,# batching/scheduler 策略
+                            prefill_chunk=prefill_chunk, # prefill 分块策略（可 sweep）
+                            sim_method=sim_method,       # 仿真方法
+                            end_reqs=end_reqs,           # 停止条件/统计规模
+                            workspace_dir=workspace_dir, # 读写结果/读 kernel latency 的目录
             )
                   
     print("System simulation completed.")

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find //wsl.localhost/Ubuntu-22.04/home/niko/reallm -type f -name \"*.yaml\" -o -name \"*.json\" -o -name \"*.yml\")",
+      "Bash(ls -la //wsl.localhost/Ubuntu-22.04/home/niko/reallm/configs/)",
+      "Bash(head -50 //wsl.localhost/Ubuntu-22.04/home/niko/reallm/simulator/base/model.py)",
+      "Bash(grep -n \"llama70b\\\\|llama405b\\\\|deepseekv2\\\\|deepseekv3\" //wsl.localhost/Ubuntu-22.04/home/niko/reallm/simulator/base/model.py)"
+    ]
+  }
+}

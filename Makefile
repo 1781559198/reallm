@@ -7,7 +7,8 @@ SHELL := /bin/bash
 GIT_ROOT := $(shell git rev-parse --show-toplevel)
 
 # Python virtual env
-VENV_PYTHON := source $(GIT_ROOT)/pyenv/bin/activate && python3
+#VENV_PYTHON := source $(GIT_ROOT)/pyenv/bin/activate && python3
+VENV_PYTHON := source $(GIT_ROOT)/.venv/bin/activate && python3
 
 # Default parameters
 WORKSPACE_DIR := workspace

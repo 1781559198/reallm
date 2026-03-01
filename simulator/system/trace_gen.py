@@ -264,6 +264,7 @@ def download_azure_llm_traces(path: str = "workspace/traces"):
     """
     os.makedirs(path, exist_ok=True)
 
+    # https://github.com/Azure/AzurePublicDataset
     url_base = "https://raw.githubusercontent.com/Azure/AzurePublicDataset/master/data/"
 
     code_path = os.path.join(path, "code_distributions.csv")

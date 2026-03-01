@@ -132,7 +132,7 @@ class llama:
         for _ in range(math.ceil(self.layers / P)):
             # Attention layer
             # Q proj: (fc_len, d_model) * (d_model, d_head*n_heads) = (fc_len, d_head*n_heads)
-            all_kernel_sizes['matmul'].add_kernel(math.ceil(fc_len / C), self.d_model, self.d_head *  math.ceil(self.n_heads / T))
+            all_kernel_sizes['matmul'].add_kernel(math.ceil(fc_len / C), self.d_model, self.d_head *  math.ceil(self.n_heads / T)) # M，序列维度按 CP 切分，hidden维度按 TP 切分
             # K/V proj: (fc_len, d_model) * (d_model, 2*d_head*n_kv_heads) = (fc_len, 2*d_head*n_kv_heads)
             all_kernel_sizes['matmul'].add_kernel(math.ceil(fc_len / C), self.d_model, 2*self.d_head * math.ceil(self.n_kv_heads / T))
             # PREFILL

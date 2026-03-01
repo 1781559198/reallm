@@ -36,11 +36,11 @@ def gen_kernel_sizes(model, num_nodes, output_dir = 'workspace/kernel_lib',
 
     all_kernel_sizes = dict()
     for prefill_len in prefill_blocks:
-        for num_decode in num_decode_blocks:
+        for num_decode in num_decode_blocks: # num_decode的意思是有128个并发 decode 请求各自的 KV Cache 长度
             if num_decode <= len(decode_ctxs):
                 decode_lens = decode_ctxs[:num_decode]
             else:
-                decode_lens = decode_ctxs + [decode_ctxs[-1]] * (num_decode - len(decode_ctxs))
+                decode_lens = decode_ctxs + [decode_ctxs[-1]] * (num_decode - len(decode_ctxs)) # 当 decode_ctxs 的元素数量不够 128 个时，用最后一个值（最大 ctx）填充剩余位置。
             for parallelism in all_parallelism:
                 kernel_sizes = model.get_kernel_sizes(prefill_len, decode_lens, parallelism)
                 for kernel_type in eval_kernel_types:
