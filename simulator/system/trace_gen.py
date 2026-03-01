@@ -52,26 +52,32 @@ def generate_trace(max_requests, distributions, end_time=None):
     request_ids = np.arange(max_requests)
 
     # Generate the distributions
+    # 生成到达时间，在arrival_timestamps时间有一个新的推理请求到达系统
     arrival_timestamps = generate_samples(distributions.arrival_process.name,
                                           distributions.arrival_process.params,
                                           max_requests)
     arrival_timestamps = np.cumsum(arrival_timestamps)
+    
     application_ids = generate_samples(distributions.application_id.name,
                                        distributions.application_id.params,
                                        max_requests)
     application_ids = map(int, application_ids)
+    # 生成 batch_size 样本，并全部转成 int
     batch_sizes = generate_samples(distributions.batch_size.name,
                                    distributions.batch_size.params,
                                    max_requests)
     batch_sizes = map(int, batch_sizes)
+    # 生成 prompt_size 样本，并全部转成 int
     prompt_sizes = generate_samples(distributions.prompt_size.name,
                                     distributions.prompt_size.params,
                                     max_requests)
     prompt_sizes = map(int, prompt_sizes)
+    # 生成 token_size 样本，并全部转成 int
     token_sizes = generate_samples(distributions.token_size.name,
                                    distributions.token_size.params,
                                    max_requests)
     token_sizes = map(int, token_sizes)
+    # 生成 request_type 样本，并全部转成 int
     request_type_ids = generate_samples(distributions.request_type.name,
                                         distributions.request_type.params,
                                         max_requests)
