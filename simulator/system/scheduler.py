@@ -7,20 +7,20 @@ from ..base.model import Model
 
 class LLMKernel:
     def __init__(self, 
-                 phase: str,
-                 model: Model,
-                 n: int,
-                 l_start: int,
+                 phase: str, 
+                 model: Model, 
+                 n: int, 
+                 l_start: int, 
                  l_end: int,
                  ctx: List[int] = [],):
-        self.phase = phase
-        self.model = model
-        self.n = n
-        self.l_start = l_start
-        self.l_end = l_end
-        self.ctx = ctx # list of context lengths, for decode kernel only
+        self.phase = phase # 'prefill' 或 'decode'
+        self.model = model # 模型对象
+        self.n = n # prefill: token数; decode: sequence数
+        self.l_start = l_start # 从第几层开始
+        self.l_end = l_end # 到第几层结束
+        self.ctx = ctx # decode专用: 每条seq的当前ctx_len列表
 
-        self.l = l_end - l_start + 1
+        self.l = l_end - l_start + 1 # 总层数
 
     # def get_flops(self) -> Tuple[int, int]:
     #     if self.phase == 'prefill':
@@ -87,11 +87,11 @@ class PrefillPool:
         self.algo = algo
         self.prefill_chunk = prefill_chunk
 
-        self.tasks = []
-        self.l = 0
-        self.n = 0
-        self.l_cur = 0
-        self.n_cur = 0
+        self.tasks = [] # 当前在池里的 PrefillTask 列表
+        self.l = 0  # 模型总层数
+        self.n = 0 # 所有 task 的 input_len 总和
+        self.l_cur = 0 # 当前已完成的层数
+        self.n_cur = 0 # 当前已完成的 token 数
 
     def new_tasks(self, tasks: List[Task]):
         self.tasks = []
@@ -109,6 +109,8 @@ class PrefillPool:
             self.l_cur = 0
 
         if self.algo == 'mixed-sarathi':
+            # 比如 prefill_chunk=512, 剩余=768 → kernel_n=512
+            # 下一轮剩余=256 → kernel_n=256
             assert self.prefill_chunk > 0
             kernel_n = min(self.prefill_chunk, self.n - self.n_cur)
         elif self.algo == 'prefetch-mixed' or self.algo == 'prefetch-thread':
@@ -117,7 +119,7 @@ class PrefillPool:
             assert n_for_prefetch <= self.n - self.n_cur
             kernel_n = n_for_prefetch
         else:
-            kernel_n = self.n
+            kernel_n = self.n # 全部一次跑完
         kernel_l = self.l
 
         if self.l_cur + kernel_l > self.l:
@@ -152,10 +154,10 @@ class DecodePool:
     def __init__(self, algo):
         self.algo = algo
 
-        self.tasks = []
-        self.l = 0
-        self.n = 0
-        self.l_cur = 0
+        self.tasks = [] # DecodeTask 列表
+        self.l = 0 # 模型总层数
+        self.n = 0 # 当前 sequence 数
+        self.l_cur = 0 # 当前已完成的层数
     
     def new_tasks(self, tasks: List[Task]):
         self.tasks = []
@@ -181,11 +183,13 @@ class DecodePool:
         elif self.algo == 'prefetch-thread':
             raise NotImplementedError
         else:
-            kernel_l = self.l
+            kernel_l = self.l # 跑全部层
 
         decode_tasks_ctx = []
         for task in self.tasks:
             decode_tasks_ctx.append(task.req.input_len + task.n_cur)
+            # n_cur 是该 seq 已经输出了多少 token
+            # 比如 input_len=512, n_cur=3 → ctx_len=515
         decode_kernel = LLMKernel('decode',
                                   self.tasks[0].req.model,
                                   kernel_n,

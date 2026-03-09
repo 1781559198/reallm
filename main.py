@@ -83,10 +83,12 @@ def run_system_simulation(config, workspace_dir, model,
     system_sim_config = config.get('system_sim', {})
     sim_method = system_sim_config.get('sim_method')
 
-    if trace_override:
+    # 指定workload用什么trace文件
+    if trace_override: # 如果命令指定了trace文件
         traces = [trace_override]
     else:
-        trace_dir = os.path.join(workspace_dir, "traces")
+        # 没有指定具体 trace 文件，则进入workspace/traces目录
+        trace_dir = os.path.join(workspace_dir, "traces") 
         if task_override and rate_override:
             traces = []
             for task in task_override:
@@ -96,6 +98,7 @@ def run_system_simulation(config, workspace_dir, model,
                         traces.append(os.path.join(trace_dir, trace_filename))
                     else:
                         print(f"Warning: Trace file {trace_filename} not found. Skipping.")
+        # 没指定从system_sim.tasks + system_sim.request_rates里面找
         elif 'tasks' in system_sim_config and 'request_rates' in system_sim_config:
             tasks = system_sim_config['tasks']
             rates = system_sim_config['request_rates']
@@ -112,6 +115,7 @@ def run_system_simulation(config, workspace_dir, model,
                     else:
                         print(f"Warning: Trace file {trace_filename} not found. Skipping.")
         else:
+            # 配置里的system_sim.traces的默认设置
             traces = system_sim_config.get('traces', [])
             if isinstance(traces, str):
                 traces = [traces]
@@ -119,7 +123,7 @@ def run_system_simulation(config, workspace_dir, model,
     # Get system simulation parameters
     system_config = config.get('system', {})
     hw_node_name = system_config.get('device')
-    num_nodes = system_config.get('num_devices', 1)
+    num_nodes = system_config.get('num_devices', 1) # gpu数量
     attn_parallelism = system_config.get('attention_parallelism')
     ffn_parallelism = system_config.get('ffn_parallelism')
 
@@ -137,6 +141,7 @@ def run_system_simulation(config, workspace_dir, model,
 
     print(f"Running {sim_method} simulation on {num_nodes} {hw_node_name} devices...")
     print(f"system_config: {system_config}")
+    # for each prefill_chunk × trace_file
     for prefill_chunk in prefill_chunks:
         print(f"Prefill chunk: {prefill_chunk}")
         for trace_file in traces:

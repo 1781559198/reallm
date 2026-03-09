@@ -51,6 +51,7 @@ class Simulator:
     def load_trace(self):
         """
         Load requests from the trace file to the prefill FIFO.
+        一次性全部加载进prefill FIFO，
         """
         with open(self.trace, "r") as f:
             # request_id,request_type,application_id,arrival_timestamp,batch_size,prompt_size,token_size
@@ -78,15 +79,19 @@ class Simulator:
         """
         Run one step of the simulation.
         """
+        # Step 1: 调度器决定这一轮跑什么、时间更新到哪
         kernel, new_time = self.scheduler.run(self.time, self.prefill_fifo, self.decode_fifo, self.accept_new_req)
-        self.time = new_time
+        self.time = new_time# # 可能被 scheduler 快进，如果没有进程则快进到下一个请求的到达时间
+
+        # Step 2: 硬件估算这一轮的 latency
         if self.exp_distribution is not None:
             latency, accept_new_req = self.hardware_sim.run(self.kernel_lib_path, kernel, self.exp_distribution)
         else:
             latency, accept_new_req = self.hardware_sim.run(self.kernel_lib_path, kernel)
         self.accept_new_req = accept_new_req
-        self.time += latency
+        self.time += latency # 时间往前走一个 kernel 时长
 
+        # Step 3: 更新任务状态，生成新的 decode 任务
         self.scheduler.update(self.time, self.requests, self.decode_fifo)
 
     def logging_results(self, detailed=False):

@@ -94,6 +94,7 @@ class HardwareSim:
 
         # check if the kernel fits in the memory
         # model_byte = sim_kernel.model.model_size_byte
+        # 粗略的算这次有几个请求，有多少token
         if sim_kernel.prefill_kernel is not None:
             num_tokens = sim_kernel.prefill_kernel.n
             num_reqs = 1
@@ -146,6 +147,7 @@ class HardwareSim:
         parallelism = (self.hardware.ep, self.hardware.tp, self.hardware.pp, self.hardware.cp)
 
         # print(f"prefill_len {prefill_len}, decode_lens {decode_lens}")
+        # kernel_sizes = model.get_kernel_sizes(512, [514, 1026], (1,2,1,1))
         self.task_sizes.append((prefill_len, decode_lens))
 
         if hasattr(model, 'n_routed_exp'):
@@ -163,13 +165,12 @@ class HardwareSim:
         # Add IO latency
         E, T, P, C = parallelism
         num_layers = model.num_layers
-        # Allreduce latency
-        if 'llama' in model.name:
+        # Allreduce latency.
+        # Use a model-agnostic activation allreduce estimate for TP>1.
+        if T > 1:
             num_bytes = 2 * (prefill_len + len(decode_lens)) * model.d_model
             allreduce_latency = self.hardware.get_allreduce_latency(num_bytes, T)
         else:
-            if T != 1 or C != 1:
-                raise ValueError(f"Unsupported parallelism {parallelism} for model {model.name}")
             allreduce_latency = 0.0
 
         io_latency = (2 * allreduce_latency * math.ceil(num_layers / P))
@@ -232,15 +233,21 @@ def find_best_shapes(df, query_shape, fixed_keys):
     existing_shapes = df[fixed_keys].values  # Extract all existing (B, M, K, N) shapes
 
     # Compute Hamming distances
+    # 传进来的tensor跟csv里面的所有tensor进行对比，有几个维度不同，Hamming 就等于多少
+    # query      =  [1,    7,   4096, 4096]
+    # (1, (1,  256, 4096, 4096)),   ← Hamming=1
     distances = [(hamming_distance(query_shape, tuple(shape)), tuple(shape)) for shape in existing_shapes]
 
     # Find the **minimum Hamming distance** (fewest differing dimensions)
+    # 找到Hamming最小的
     min_hamming_dist = min(d[0] for d in distances)
     
     # Identify the first shape with this minimal Hamming distance
+    # 第一个最优 shape
     best_match_shape = next(d[1] for d in distances if d[0] == min_hamming_dist)
 
     # Determine which dimensions are fixed
+    # 想通维度固定，确认不同的维度是哪几个
     fixed_dimensions = [idx for idx, (q, b) in enumerate(zip(query_shape, best_match_shape)) if q == b]
 
     # Filter dataset to only include rows that match the query in fixed dimensions
@@ -255,6 +262,12 @@ def find_best_shapes(df, query_shape, fixed_keys):
     if len(subset_shapes) < 2:
         return None  # Not enough points to interpolate
 
+    # 计算绝对差之和并排序
+    """
+    shape (1, 256,  4096, 4096):
+    |1-1| + |7-256|  + |4096-4096| + |4096-4096|
+    =   0   +   249   +      0      +      0       = 249
+    """
     # Compute sum of absolute differences within the subset
     abs_diffs = [(sum_absolute_difference(query_shape, shape), shape) for shape in subset_shapes]
     
@@ -263,11 +276,12 @@ def find_best_shapes(df, query_shape, fixed_keys):
 
     # Select the closest two shapes
     # best_shapes = [shape for _, shape in abs_diffs[:2]]  # Take at most 2
-    if len(abs_diffs) >= 5:
+    if len(abs_diffs) >= 5: # 选5个
         best_shapes = [shape for _, shape in abs_diffs[:5]]
     else:
         best_shapes = [shape for _, shape in abs_diffs[:]]
 
+    # 三个维度不同退化到 find_nearest_neighbor（KDTree 最近邻兜底）
     return best_shapes if len(best_shapes) >= 2 else None  # Return only if we have two valid points
 
 
@@ -338,13 +352,14 @@ def batch_interpolate_latency(csv_name, kernel_sizes, verbose=False):
     df = pd.read_csv(csv_name)  # Load the dataset
 
     # Load the dataset
-    df.columns = df.columns.str.strip()  # Clean column names
+    df.columns = df.columns.str.strip()  # ── Step 2: 清理列名（去除空格）
 
-    dimension_keys = list(df.columns[:-1])  # Extract dimension keys
-    df = df.drop_duplicates(subset=dimension_keys, keep='last')  # Drop duplicates
+    dimension_keys = list(df.columns[:-1])  # ── Step 3: 提取维度列名
+    df = df.drop_duplicates(subset=dimension_keys, keep='last')  # ── Step 4: 去重
 
     total_latency = 0
 
+    # 确定overhead，也就是固定开销
     if 'matmul' in csv_name:
         overhead = 1.0e-5
         # print(f"Overhead for matmul: {overhead}")
@@ -358,6 +373,7 @@ def batch_interpolate_latency(csv_name, kernel_sizes, verbose=False):
     #     overhead = 4.5e-5
         # print(f"Overhead for others: {overhead}")
 
+    # 解析shape大小
     for shape, freq in kernel_sizes.items():
         if len(dimension_keys) == 4: # Matmul
             if len(shape) != 4:
@@ -381,6 +397,7 @@ def batch_interpolate_latency(csv_name, kernel_sizes, verbose=False):
         else:
             raise ValueError(f"Unsupported dimension keys: {dimension_keys}")
 
+        # 精准命中
         if not exact_match.empty:
             latency_exact = exact_match['latency'].values[0]
             total_latency += latency_exact * freq
@@ -388,10 +405,12 @@ def batch_interpolate_latency(csv_name, kernel_sizes, verbose=False):
                 print(f"Exact match found for {query_shape}: {latency_exact:.3e} s")
             # results.append((B, M, K, N, latency_exact))
             continue
-
+        
+        # 没有命中
         # Find the best two shapes
         best_shapes = find_best_shapes(df, query_shape, dimension_keys)
 
+        # 如果find_best_shapes没有找到，退化到最近邻（KDTree）
         # If no valid shapes found, return None
         if not best_shapes:
             # results.append((B, M, K, N, None))
@@ -417,12 +436,14 @@ def batch_interpolate_latency(csv_name, kernel_sizes, verbose=False):
                 latencies.append(latency[0])
 
         # If only one valid point, return its latency
+        # 如果只有一个latency符合，直接使用
         if len(latencies) == 1:
             print(f"Only one close match found for {query_shape}: {latencies[0]:.3e} s")
             # results.append((B, M, K, N, latencies[0]))
             total_latency += (latencies[0] + overhead) * freq
             continue
-
+        
+        # 预测未知 shape 的 latency
         latency_interpolated = interpolate_latency(query_shape, best_shapes,latencies, dimension_keys)
 
         # Perform interpolation on the detected varying dimension

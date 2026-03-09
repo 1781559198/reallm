@@ -15,17 +15,21 @@ def run_system_sim(model, trace,
                    ):
 
     # This actually doesn't matter ??
-    eval_hardware = Hardware(node=H100, num_nodes=num_nodes, 
-                             parallelism=parallelism, io_algo=io_algo,
+    eval_hardware = Hardware(node=H100, # 硬件节点（flops / mem_bw / mem_size 等）
+                             num_nodes=num_nodes,  # GPU 数量
+                             parallelism=parallelism,  # (ep, tp, pp, cp)
+                             io_algo=io_algo,  # 比如 'multishot'
     )
 
+    # HardwareSim 是「给定一个 SimKernel，算出它要多少时间」的工具
     hardware_sim = HardwareSim(
         hardware=eval_hardware,
-        method=sim_method,
+        method=sim_method, # 'roofline' or 'llmcompass'
         scheduler_algo=scheduler_algo,
-        max_ctx_len = max_ctx_len,
+        max_ctx_len = max_ctx_len, # 最大上下文长度，用于显存估算
     )
 
+    # prefill_pool / decode_pool（当前已入池、等待被 batch 的任务），决定每一轮怎么决策
     scheduler = Scheduler(
         algo=scheduler_algo,
         prefill_chunk=prefill_chunk,
